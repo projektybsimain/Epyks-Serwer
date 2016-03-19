@@ -8,5 +8,9 @@ namespace Epyks_Serwer
 {
     class User
     {
+        public User()
+        {
+
+        }
     }
 }
