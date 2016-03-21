@@ -1,9 +1,4 @@
-﻿using Ekyps_Serwer;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
 
 namespace Epyks_Serwer
 {
@@ -12,7 +7,19 @@ namespace Epyks_Serwer
         static void Main(string[] args)
         {
             Console.WriteLine("=== Epyks Serwer ===");
-            Database d = new Database();
+            int serverPort = 9000;
+            Worker worker = null;
+            try
+            {
+                worker = new Worker(serverPort);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Nie udało się uruchomić serwera: " + ex.Message);
+                Console.ReadKey();
+                return;
+            }
+            Console.WriteLine("Serwer uruchomiono pomyślnie na porcie {0}", serverPort);
             Console.ReadKey();
         }
     }
