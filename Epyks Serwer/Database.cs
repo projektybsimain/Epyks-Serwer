@@ -39,11 +39,9 @@ namespace Ekyps_Serwer
             Console.WriteLine("Połączono!");
         }
 
-        public bool TryGetUser(out User user, NetworkCredential credential, out string message, bool isNewUser)
+        public bool TryGetUser(out User user, NetworkCredential credential, out string message, bool isNewUser) // parametr isNewUser określa czy chcemy jednocześnie zarejestrować danego użytkownika, parametr message informuje dlaczego nie da sie zarejestrować danego użytkownika lub zalogować
         {
-            message = "Resposne";
-            user = new User(credential, "asd");
-            return false;
+            throw new NotImplementedException();
         }
 
         private void AddUser(User user)

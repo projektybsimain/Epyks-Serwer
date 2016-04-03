@@ -13,7 +13,7 @@ namespace Epyks_Serwer
     {
         TcpListener server;
         Thread listener;
-        List<User> users;
+        List<User> usersOnline; // użytkownicy aktualnie zalogowani do serwera (online)
         Database database;
 
         public Worker(int port)
@@ -28,7 +28,7 @@ namespace Epyks_Serwer
                 throw new Exception("Port " + port + " jest już zajęty");
             }
             database = new Database();
-            users = new List<User>();
+            usersOnline = new List<User>();
             listener = new Thread(() => Listen(port));
             listener.Start();
         }
@@ -88,7 +88,8 @@ namespace Epyks_Serwer
                         // przesyłamy referencje do danych które nie są znane bazie danych
                         user.SetConnection(userConnection);
                         user.SetDatabase(database);
-                        user.SetUsers(users);
+                        user.SetUsers(usersOnline);
+                        usersOnline.Add(user); // odnotowujemy że dany użytkownik stał się online 
                         user.DoWork(); // dalsza obsługa klienta
                     }
                 }
@@ -104,8 +105,8 @@ namespace Epyks_Serwer
 
         private void onConnectionTimeoutEvent(Thread connectionThread, TcpClient connection) // zdarzanie występujące przy zbyt długej odpowiedzi na klienta
         {
-            connectionThread.Abort();
             connection.Close();
+            connectionThread.Abort();
         }
 
         private void Listen(int port)
