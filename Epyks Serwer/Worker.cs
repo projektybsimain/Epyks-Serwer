@@ -33,11 +33,23 @@ namespace Epyks_Serwer
             listener.Start();
         }
 
+        private void Listen(int port)
+        {
+            while (true)
+            {
+                TcpClient newClient = server.AcceptTcpClient();
+                Thread tempReference = null;
+                Thread connectionThread = new Thread(() => AcceptSession(tempReference, newClient)); // w przypadku pomyślnego zalogowania dalsza obsługa klienta odbywać się będzie w tym wątku
+                tempReference = connectionThread;
+                connectionThread.Start();
+            }
+        }
+
         private void AcceptSession(Thread connectionThread, TcpClient userConnection)
         {
             System.Timers.Timer timeout = new System.Timers.Timer(5000); // timer ustawiony na 5 sekund, tyle czasu ma klient na przesłanie danych
             timeout.Elapsed += delegate { onConnectionTimeoutEvent(connectionThread, userConnection); };
-            timeout.Start();
+            //timeout.Start();
             NetworkStream stream = userConnection.GetStream();
             byte[] data = new byte[128]; // bufor do odbioru danych
             int count = stream.Read(data, 0, data.Length);
@@ -47,44 +59,44 @@ namespace Epyks_Serwer
                 string[] parameters = Regex.Split(message, ";"); // z otrzymanej wiadomości odczytujemy login oraz hasło
                 if (parameters.Length == 3) // spodziewamy się tylko trzech parametrów, w innym przypadku kończymy połączenie
                 {
+                    if (parameters[0] != Command.Login && parameters[0] != Command.Register)
+                    {
+                        userConnection.Close();
+                        return;
+                    }
+
                     User user;
                     NetworkCredential userCredential;
                     try
                     {
                         userCredential = new NetworkCredential(parameters[1], parameters[2]);
                     }
-                    catch // jeśli dane podane przez klienta nie są prawidłowe
-                    {
-                        userConnection.Close();
-                        return;
-                    }
-
-                    if (!Command.IsKnownCommand(parameters[0]))
+                    catch // jeśli dane podane przez klienta mają nieprawidłowy format
                     {
                         userConnection.Close();
                         return;
                     }
 
                     bool isNewUser = parameters[0] == Command.Register;
-                    string response = null;
+                    int errorMessageID = 0; //ewentualna odpowiedz bazy danych w przypadku błędu
 
                     bool isValidUser;
 
                     lock (ThreadSync.Lock)
                     {
-                        isValidUser = database.TryGetUser(out user, userCredential, out response, isNewUser); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
+                        isValidUser = database.TryGetUser(out user, userCredential, ref errorMessageID, isNewUser); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
                     }
 
                     if (!isValidUser)
                     {
-                        byte[] responseBytes = Encoding.UTF8.GetBytes(response);
-                        stream.Write(responseBytes, 0, responseBytes.Length); // odsyłamy informację do klienta, np. że dany użytkownik nie istnieje, albo nie można kogoś zalogować ponieważ dany login jest już zajęty
+                        WriteMessage(stream, Command.AuthFail + ";" + errorMessageID);
                         userConnection.Close();
                         return;
                     }
                     else
                     {
                         Console.WriteLine("Zalogowano użytkownika: " + parameters[1]);
+                        WriteMessage(stream, Command.AuthSuccess);
                         // przesyłamy referencje do danych które nie są znane bazie danych
                         user.SetConnection(userConnection);
                         user.SetDatabase(database);
@@ -109,16 +121,10 @@ namespace Epyks_Serwer
             connectionThread.Abort();
         }
 
-        private void Listen(int port)
+        private void WriteMessage(NetworkStream stream, string message)
         {
-            while (true)
-            {
-                TcpClient newClient = server.AcceptTcpClient();
-                Thread tempReference = null;
-                Thread connectionThread = new Thread(() => AcceptSession(tempReference, newClient)); // w przypadku pomyślnego zalogowania dalsza obsługa klienta odbywać się będzie w tym wątku
-                tempReference = connectionThread;
-                connectionThread.Start();
-            }
+            byte[] responseBytes = Encoding.UTF8.GetBytes(message);
+            stream.Write(responseBytes, 0, responseBytes.Length);
         }
     }
 }

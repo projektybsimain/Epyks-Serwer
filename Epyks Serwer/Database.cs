@@ -1,11 +1,7 @@
 ﻿using Epyks_Serwer;
 using System;
-using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Net;
 
 namespace Ekyps_Serwer
@@ -39,23 +35,61 @@ namespace Ekyps_Serwer
             Console.WriteLine("Połączono!");
         }
 
-        public bool TryGetUser(out User user, NetworkCredential credential, out string message, bool isNewUser) // parametr isNewUser określa czy chcemy jednocześnie zarejestrować danego użytkownika, parametr message informuje dlaczego nie da sie zarejestrować danego użytkownika lub zalogować
+        public bool TryGetUser(out User user, NetworkCredential credential, ref int message, bool isNewUser) // parametr isNewUser określa czy chcemy jednocześnie zarejestrować danego użytkownika, parametr message informuje dlaczego nie da sie zarejestrować danego użytkownika lub zalogować
         {
-            throw new NotImplementedException();
+            user = null;
+            try
+            {
+                user = new User(credential);
+            }
+            catch (InvalidUsernameException)
+            {
+                message = (int)ErrorMessageID.InvalidUsername;
+                return false;
+            }
+            catch
+            {
+                message = (int)ErrorMessageID.UnknownError;
+                return false;
+            }
+            bool userExists = UserExists(user);
+            if (isNewUser && userExists) // jeśli użytkownik chce się zarejestrować przy użyciu zajętego już loginu
+            {
+                message = (int)ErrorMessageID.UsernameTaken;
+                return false;
+            }
+            else if (isNewUser && !userExists)
+            {
+                AddUser(user);
+                return true;
+            }
+            else if (!isNewUser && !VerifyUser(user))
+            {
+                message = (int)ErrorMessageID.InvalidUserCredential;
+                return false;
+            }
+            return true;
         }
 
         private void AddUser(User user)
         {
-            string commandText = "INSERT INTO Users (Login, Name, Password) VALUES ('" + user.Login + "', '" + user.Name + "', '" + user.Password + "')";
+            string commandText = "INSERT INTO Users (Login, Name, Password) VALUES ('" + user.Login + "', '" + user.Name + "', '" + user.PasswordHash + "')";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
         }
 
         private bool UserExists(User user)
         {
-            string commandText = "SELECT Count(*) FROM Users WHERE Login='" + user.Login + "'";
+            string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
-            return Convert.ToInt32(command.ExecuteScalar()) != 0;
+            return command.ExecuteScalar() != null;
+        }
+
+        private bool VerifyUser(User user)
+        {
+            string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' AND Password = '" + user.PasswordHash + "' LIMIT 1";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            return command.ExecuteScalar() != null;
         }
     }
 }
