@@ -1,6 +1,5 @@
 ﻿using Ekyps_Serwer;
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -13,8 +12,6 @@ namespace Epyks_Serwer
     {
         TcpListener server;
         Thread listener;
-        List<User> usersOnline; // użytkownicy aktualnie zalogowani do serwera (online)
-        Database database;
 
         public Worker(int port)
         {
@@ -27,8 +24,7 @@ namespace Epyks_Serwer
             {
                 throw new Exception("Port " + port + " jest już zajęty");
             }
-            database = new Database();
-            usersOnline = new List<User>();
+            Database.Connect();
             listener = new Thread(() => Listen(port));
             listener.Start();
         }
@@ -49,7 +45,7 @@ namespace Epyks_Serwer
         {
             System.Timers.Timer timeout = new System.Timers.Timer(5000); // timer ustawiony na 5 sekund, tyle czasu ma klient na przesłanie danych
             timeout.Elapsed += delegate { onConnectionTimeoutEvent(connectionThread, userConnection); };
-            //timeout.Start();
+            timeout.Start();
             NetworkStream stream = userConnection.GetStream();
             byte[] data = new byte[128]; // bufor do odbioru danych
             int count = stream.Read(data, 0, data.Length);
@@ -57,9 +53,27 @@ namespace Epyks_Serwer
             {
                 string message = Encoding.UTF8.GetString(data, 0, count);
                 string[] parameters = Regex.Split(message, ";"); // z otrzymanej wiadomości odczytujemy login oraz hasło
-                if (parameters.Length == 3) // spodziewamy się tylko trzech parametrów, w innym przypadku kończymy połączenie
+                if (parameters.Length == 4) // spodziewamy się tylko czterech parametrów, w innym przypadku kończymy połączenie
                 {
-                    if (parameters[0] != Command.Login && parameters[0] != Command.Register)
+                    string connectionCommand = parameters[0];
+                    string login = parameters[1];
+                    string password = parameters[2];
+
+                    if (connectionCommand != CommandSet.Login && connectionCommand != CommandSet.Register)
+                    {
+                        userConnection.Close();
+                        return;
+                    }
+
+                    if (UserCollection.IsOnline(login))
+                    {
+                        WriteMessage(stream, CommandSet.AuthFail + ";" + (int)ErrorMessageID.UserAlreadyLoggedIn);
+                        userConnection.Close();
+                        return;
+                    }
+
+                    int commandsPort; // na tym porcie ustanawiane jest pomocnicze połączenie do transmisji komunikatóww
+                    if (!Int32.TryParse(parameters[3], out commandsPort) || commandsPort < 1 || commandsPort > 65535)
                     {
                         userConnection.Close();
                         return;
@@ -69,40 +83,39 @@ namespace Epyks_Serwer
                     NetworkCredential userCredential;
                     try
                     {
-                        userCredential = new NetworkCredential(parameters[1], parameters[2]);
+                        userCredential = new NetworkCredential(login, password);
                     }
                     catch // jeśli dane podane przez klienta mają nieprawidłowy format
                     {
                         userConnection.Close();
                         return;
                     }
+                    timeout.Stop();
 
-                    bool isNewUser = parameters[0] == Command.Register;
+                    bool isNewUser = connectionCommand == CommandSet.Register;
                     int errorMessageID = 0; //ewentualna odpowiedz bazy danych w przypadku błędu
 
                     bool isValidUser;
 
                     lock (ThreadSync.Lock)
                     {
-                        isValidUser = database.TryGetUser(out user, userCredential, ref errorMessageID, isNewUser); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
+                        isValidUser = Database.TryGetUser(out user, userCredential, ref errorMessageID, isNewUser); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
                     }
 
                     if (!isValidUser)
                     {
-                        WriteMessage(stream, Command.AuthFail + ";" + errorMessageID);
+                        WriteMessage(stream, CommandSet.AuthFail + ";" + errorMessageID);
                         userConnection.Close();
                         return;
                     }
                     else
                     {
-                        Console.WriteLine("Zalogowano użytkownika: " + parameters[1]);
-                        WriteMessage(stream, Command.AuthSuccess);
+                        Console.WriteLine("Zalogowano użytkownika: " + login);
+                        WriteMessage(stream, CommandSet.AuthSuccess);
                         // przesyłamy referencje do danych które nie są znane bazie danych
-                        user.SetConnection(userConnection);
-                        user.SetDatabase(database);
-                        user.SetUsers(usersOnline);
-                        usersOnline.Add(user); // odnotowujemy że dany użytkownik stał się online 
-                        user.DoWork(); // dalsza obsługa klienta
+                        user.SetConnection(userConnection, commandsPort);
+                        UserCollection.Add(user); // odnotowujemy że dany użytkownik stał się online 
+                        user.DoWork(connectionThread); // dalsza obsługa klienta
                     }
                 }
                 else

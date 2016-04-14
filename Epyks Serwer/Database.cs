@@ -1,16 +1,17 @@
 ﻿using Epyks_Serwer;
 using System;
+using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
 using System.Net;
 
 namespace Ekyps_Serwer
 {
-    class Database
+    public static class Database
     {
-        private SQLiteConnection connection;
+        static SQLiteConnection connection;
 
-        public Database()
+        public static void Connect()
         {
             string dataBaseName = "database.sqlite";
             bool isEmpty = false;
@@ -35,7 +36,7 @@ namespace Ekyps_Serwer
             Console.WriteLine("Połączono!");
         }
 
-        public bool TryGetUser(out User user, NetworkCredential credential, ref int message, bool isNewUser) // parametr isNewUser określa czy chcemy jednocześnie zarejestrować danego użytkownika, parametr message informuje dlaczego nie da sie zarejestrować danego użytkownika lub zalogować
+        public static bool TryGetUser(out User user, NetworkCredential credential, ref int message, bool isNewUser) // parametr isNewUser określa czy chcemy jednocześnie zarejestrować danego użytkownika, parametr message informuje dlaczego nie da sie zarejestrować danego użytkownika lub zalogować
         {
             user = null;
             try
@@ -47,8 +48,9 @@ namespace Ekyps_Serwer
                 message = (int)ErrorMessageID.InvalidUsername;
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine(ex.StackTrace);
                 message = (int)ErrorMessageID.UnknownError;
                 return false;
             }
@@ -71,25 +73,31 @@ namespace Ekyps_Serwer
             return true;
         }
 
-        private void AddUser(User user)
+        private static void AddUser(User user)
         {
             string commandText = "INSERT INTO Users (Login, Name, Password) VALUES ('" + user.Login + "', '" + user.Name + "', '" + user.PasswordHash + "')";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
         }
 
-        private bool UserExists(User user)
+        private static bool UserExists(User user)
         {
             string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteScalar() != null;
         }
 
-        private bool VerifyUser(User user)
+        private static bool VerifyUser(User user)
         {
             string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' AND Password = '" + user.PasswordHash + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteScalar() != null;
+        }
+
+        public static List<User> GetFriendsList(string Login) // TO-DO!
+        {
+            List<User> friends = new List<User>();
+            return friends;
         }
     }
 }

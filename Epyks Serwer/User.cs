@@ -11,16 +11,14 @@ using System.Threading;
 
 namespace Epyks_Serwer
 {
-    class User // doddać synchronizacje wątków
+    public class User // doddać synchronizacje wątków
     {
         public string Login { get; private set; } // wykorzystywane przy sprawdzaniu kto ze znajomych jest online
         public string Name { get; private set; }
         public string PasswordHash { get; private set; }
-        private Timer timer; // timer odpytujący klienta co 15 minut czy nadal jest online
-        private Database database;
-        private List<User> usersOnline; // dostęp do globalnej listy użytkowników którzy są aktualnie zalogowani na serwerze
-        private TcpClient connection;
-        private NetworkStream stream;
+        public List<User> FriendsList { get; private set; }
+        private Thread thread;
+        private Connection connection;
 
         public User(NetworkCredential credential)
         {
@@ -28,50 +26,27 @@ namespace Epyks_Serwer
             if (Login.Length > 24 || ValidateLogin() == false) // jeśli login jest dłuższy niż 24 znaki lub zawiera niedozwolone znaki
                 throw new InvalidUsernameException();
             PasswordHash = CalculateSHA256(credential.Password, credential.UserName);
+            FriendsList = Database.GetFriendsList(Login);
         }
 
-        public void DoWork()
+        public void DoWork(Thread thread) // potrzebna referencja do wątku by móc zareagować na timeout
         {
-            stream = connection.GetStream();
-            // Obsługa klienta, na początek wymagane jest wczytanie listy znajomych
-        }
-
-        public void SetDatabase(Database database)
-        {
-            this.database = database;
-        }
-
-        public void SetUsers(List<User> users)
-        {
-            usersOnline = users;
-        }
-
-        public void SetConnection(TcpClient connection)
-        {
-            this.connection = connection;
-        }
-
-        private string[] ReceiveMessage()
-        {
-            int i;
-            byte[] bytes = new byte[256];
-            while ((i = stream.Read(bytes, 0, bytes.Length)) != 0)
+            this.thread = thread;
+            System.Timers.Timer timeout = new System.Timers.Timer(900000); // timer odpytujący klienta co 15 minut czy nadal jest online
+            timeout.Elapsed += delegate { onUserTimeout(); };
+            timeout.Start();
+            while (true)
             {
-                string msg = Encoding.ASCII.GetString(bytes, 0, i);
-                string[] args = Regex.Split(msg, ";"); // automatyczny podział komunikatu na argumenty
-                for (int j = 0; j < args.Length; j++)
-                    args[j] = args[j].Replace("&sem", ";");
-                return args;
+                connection.ReceiveMessage();
+                if (connection.Command == CommandSet.Logout)
+                    LogoutUser();
+                Console.WriteLine(connection.Command);
             }
-            return new string[] { String.Empty };
         }
 
-        private void SendMessage(params string[] message)
+        public void SetConnection(TcpClient connection, int commandsPort)
         {
-            for (int i = 0; i < message.Length; i++)
-                message[i] = message[i].Replace(";", "&sem"); // usuwa średnik z wiadomości ze względu na ich użycie przy podziale komunikatów
-            byte[] bytes = Encoding.ASCII.GetBytes(String.Join(";", message));
-            stream.Write(bytes, 0, bytes.Length);
+            this.connection = new Connection(connection, commandsPort, LogoutUser);
         }
 
         private string CalculateSHA256(string text, string salt)
@@ -91,6 +66,28 @@ namespace Epyks_Serwer
         private bool ValidateLogin()
         {
             return Regex.IsMatch(Login, "^([0-9]|[a-z]|_)+$");
+        }
+
+        private void LogoutUser()
+        {
+            connection.Disconnect();
+            UserCollection.Remove(this);
+            Console.WriteLine("Wylogowano użytkownika: " + Login);
+            thread.Abort();
+        }
+
+        private void onUserTimeout() // zdarzanie występujące przy zbyt długej odpowiedzi na klienta
+        {
+            connection.SendMessage(CommandSet.Alive); // jeśli przesłanie komunikatu się nie powiedzie to znaczy, że użytkownik zostął niespodziewanie odłączony
+        }
+
+        public void FriendStatusChanged(User user, bool isLoggingIn)
+        {
+            string code = "0";
+            if (isLoggingIn)
+                code = "1";
+            string message = CommandSet.StatusChanged + ";" + user.Login + ";" + code;
+            connection.SendMessageUDP(message);
         }
     }
 
