@@ -2,7 +2,7 @@
 
 namespace Epyks_Serwer
 {
-    static class CommandSet
+    public static class CommandSet
     {
         public static readonly string Register = "REGISTER";
         public static readonly string Login = "LOGIN";

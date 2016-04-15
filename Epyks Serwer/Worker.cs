@@ -114,6 +114,7 @@ namespace Epyks_Serwer
                         WriteMessage(stream, CommandSet.AuthSuccess);
                         // przesyłamy referencje do danych które nie są znane bazie danych
                         user.SetConnection(userConnection, commandsPort);
+                        user.UpdateContactsList();
                         UserCollection.Add(user); // odnotowujemy że dany użytkownik stał się online 
                         user.DoWork(connectionThread); // dalsza obsługa klienta
                     }

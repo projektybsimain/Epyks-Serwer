@@ -26,7 +26,7 @@ namespace Ekyps_Serwer
             connection.Open();
             if (isEmpty) // jeśli baza danych była pusta musimy utworzyć w niej początkowe tabele
             {
-                string commandText = "CREATE TABLE Users (UserID INTEGER PRIMARY KEY AUTOINCREMENT, Login varchar(255) NOT NULL, Name varchar(255) NOT NULL, Password varchar(255) NOT NULL);";
+                string commandText = "CREATE TABLE Users (UserID INTEGER PRIMARY KEY AUTOINCREMENT, Login varchar(24) NOT NULL, Name varchar(48) NOT NULL, Password varchar(255) NOT NULL);";
                 SQLiteCommand command = new SQLiteCommand(commandText, connection);
                 command.ExecuteNonQuery();
                 commandText = "CREATE TABLE Contacts (UserID INTEGER, ContactID INTEGER, FOREIGN KEY(UserID) REFERENCES Users(UserID), FOREIGN KEY(ContactID) REFERENCES Users(UserID));";
@@ -63,6 +63,7 @@ namespace Ekyps_Serwer
             else if (isNewUser && !userExists)
             {
                 AddUser(user);
+                user.ID = GetUserID(user);
                 return true;
             }
             else if (!isNewUser && !VerifyUser(user))
@@ -70,7 +71,41 @@ namespace Ekyps_Serwer
                 message = (int)ErrorMessageID.InvalidUserCredential;
                 return false;
             }
+            user.ID = GetUserID(user);
             return true;
+        }
+
+        private static int GetUserID(User user)
+        {
+            string commandText = "SELECT UserID FROM Users WHERE Login = '" + user.Login + "'";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            SQLiteDataReader reader = command.ExecuteReader();
+            reader.Read();
+            return reader.GetInt32(0);
+        }
+
+        public static List<Contact> GetContactsList(User user)
+        {
+            List<Contact> friends = new List<Contact>();
+            string commandText = "SELECT ContactID FROM Contacts WHERE UserID = '" + user.ID + "'";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            SQLiteDataReader reader = command.ExecuteReader();
+            List<int> contacts = new List<int>();
+            while (reader.Read())
+            {
+                contacts.Add((int)reader["ContactID"]); // wczytujemy identyfikatory wszystkich znajomych
+            }
+            reader.Close();
+            foreach (int contactID in contacts)
+            {
+                command.CommandText = "SELECT Login, Name FROM Users WHERE UserID = '" + contactID + "'";
+                reader = command.ExecuteReader();
+                reader.Read();
+                string login = reader["Login"].ToString();
+                string name = reader["Name"].ToString();
+                friends.Add(new Contact(contactID, login, name));
+            }
+            return friends;
         }
 
         private static void AddUser(User user)
@@ -94,10 +129,11 @@ namespace Ekyps_Serwer
             return command.ExecuteScalar() != null;
         }
 
-        public static List<User> GetFriendsList(string Login) // TO-DO!
+        public static void ChangeUserPassword(User user)
         {
-            List<User> friends = new List<User>();
-            return friends;
+            string commandText = "UPDATE Users SET Password = '" + user.PasswordHash + "' WHERE UserID = '" + user.ID + "'";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            command.ExecuteNonQuery();
         }
     }
 }
