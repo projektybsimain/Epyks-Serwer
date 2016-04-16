@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -18,9 +17,9 @@ namespace Epyks_Serwer
         public string Name { get; private set; }
         public string PasswordHash { get; private set; }
         public List<Contact> ContactsList { get; set; }
+        public bool IsBusy { get; private set; }
         private Thread thread;
         private Connection connection;
-        private System.Timers.Timer timeout;
 
         public User(NetworkCredential credential)
         {
@@ -28,47 +27,178 @@ namespace Epyks_Serwer
             if (Login.Length > 24 || ValidateLogin() == false) // jeśli login jest dłuższy niż 24 znaki lub zawiera niedozwolone znaki
                 throw new InvalidUsernameException();
             PasswordHash = CalculateSHA256(credential.Password.Trim(), Login);
-            timeout = new System.Timers.Timer(900000); // timer odpytujący klienta co 15 minut czy nadal jest online
-            timeout.Elapsed += delegate { onUserTimeout(); };
+            IsBusy = false;
+            Name = null;
         }
 
         public void DoWork(Thread thread) // potrzebna referencja do wątku by móc zareagować na timeout
         {
+            if (String.IsNullOrEmpty(Name))
+                Name = Database.GetUserName(this);
             this.thread = thread;
-            timeout.Start();
             while (true)
             {
                 connection.ReceiveMessage();
                 if (connection.Command == CommandSet.Logout)
                     LogoutUser();
                 else if (connection.Command == CommandSet.Contacts)
-                    connection.SendMessage(CommandSet.Contacts, GetContactsString());
+                    GetContacts();
                 else if (connection.Command == CommandSet.ChangePass)
                     ChangePassword();
+                else if (connection.Command == CommandSet.Call)
+                    Call();
+                else if (connection.Command == CommandSet.StartConversation)
+                    IsBusy = true;
+                else if (connection.Command == CommandSet.StopConversation)
+                    IsBusy = false;
+                else if (connection.Command == CommandSet.Find)
+                    FindUsers();
+                else if (connection.Command == CommandSet.ChangeName)
+                    ChangeName();
+                else if (connection.Command == CommandSet.GetName)
+                    GetName();
+                else if (connection.Command == CommandSet.Invite)
+                    Invite();
+                else if (connection.Command == CommandSet.Invitations)
+                    GetInvitations();
+                else if (connection.Command == CommandSet.AcceptInvite)
+                    AcceptInvite();
+                else if (connection.Command != CommandSet.LongMessage) // ignorujemy wiadomości typu LONG_MSG
+                    connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
             }
+        }
+
+        private void AcceptInvite()
+        {
+
+        }
+
+        private void GetInvitations()
+        {
+            List<Invitation> invitations = Database.GetInvitationsList(this);
+            string[] array = new string[invitations.Count];
+            for (int i = 0; i < array.Length; i++)
+            {
+                array[i] = invitations[i].ToString();
+            }
+            connection.SendMessage(CommandSet.Invitations, String.Join(";", array));
+        }
+
+        private void Invite() // WYSYŁANIE ZAPROSZENIA JEŚLI ZNAJOMY JEST ONLINE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        {
+            string targetLogin = connection[0];
+            if (String.IsNullOrEmpty(targetLogin) || targetLogin == Login)
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            string message = connection[1];
+            if (message.Trim().Length == 0) // pozbywamy się pustych wiadomości
+                message = String.Empty;
+            if (!Database.AddInvite(this, targetLogin, message))
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            try
+            {
+                User targetUser = UserCollection.GetUserByLogin(targetLogin);
+                targetUser.NewInvitation(this, message);
+            }
+            catch
+            {
+                // jeśli użytkownik nie jest online to nie robimy nic
+            }
+        }
+
+        private void GetName()
+        {
+            connection.SendMessage(CommandSet.Name, Name);
+        }
+
+        private void ChangeName()
+        {
+            try
+            {
+                SetName(connection[0]);
+            }
+            catch
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidName);
+                return;
+            }
+            Database.ChangeUserName(this);
+        }
+
+        public void SetName(string name)
+        {
+            if (String.IsNullOrEmpty(name.Trim()) || name.Length > 48 || name.IndexOf(';') >= 0)
+                throw new Exception();
+            Name = name;
+        }
+
+        private void FindUsers()
+        {
+            string target = connection[0];
+            if (String.IsNullOrEmpty(target))
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            List<Contact> usersFound = Database.FindUsers(target, Login);
+            string[] array = new string[usersFound.Count];
+            for (int i = 0; i < array.Length; i++)
+            {
+                array[i] = usersFound[i].ToString();
+            }
+            connection.SendMessage(CommandSet.FoundUsers, String.Join(";", array));
+        }
+
+        private void Call()
+        {
+            string targetLogin = connection[0];
+            if (String.IsNullOrEmpty(targetLogin))
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            if (ContactsList.FindIndex(item => item.Login == targetLogin) == -1) // jeśli użytkownik nie jest w znajomych
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.NotInContacts);
+                return;
+            }
+            if (!UserCollection.IsOnline(targetLogin))
+            {
+                connection.SendMessage(CommandSet.Call, ErrorMessageID.UserOffline);
+                return;
+            }
+            User targetUser;
+            try
+            {
+                targetUser = UserCollection.GetUserByLogin(targetLogin);
+            }
+            catch
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            if (targetUser.IsBusy)
+            {
+                connection.SendMessage(CommandSet.Call, ErrorMessageID.UserBusy);
+                return;
+            }
+            connection.SendMessage(CommandSet.Call, targetUser.GetIPString());
         }
 
         private void ChangePassword()
         {
-            string oldPassword = null, newPassword = null;
-            try
-            {
-                oldPassword = connection[0];
-                newPassword = connection[1].Trim();
-            }
-            catch
-            {
-                connection.SendMessage(CommandSet.Error, ((int)ErrorMessageID.InvalidMessage).ToString());
-                return;
-            }
-            string oldPasswordHash = CalculateSHA256(oldPassword, Login);
+            string oldPasswordHash = CalculateSHA256(connection[0], Login);
             if (oldPasswordHash != PasswordHash)
             {
-                connection.SendMessage(CommandSet.Error, ((int)ErrorMessageID.InvalidPassword).ToString());
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidPassword);
                 return;
             }
-            string newPasswordHash = CalculateSHA256(newPassword, Login);
-            PasswordHash = newPasswordHash;
+            PasswordHash = CalculateSHA256(connection[1].Trim(), Login);
             Database.ChangeUserPassword(this);
             connection.SendMessage(CommandSet.OK);
         }
@@ -78,7 +208,7 @@ namespace Epyks_Serwer
             ContactsList = Database.GetContactsList(this);
         }
 
-        public string GetContactsString()
+        public void GetContacts()
         {
             ContactsList = Database.GetContactsList(this);
             string[] contacts = new string[ContactsList.Count];
@@ -90,12 +220,12 @@ namespace Epyks_Serwer
                     code = "1";
                 contacts[i] = contact.ToString() + ";" + code;
             }
-            return String.Join(";", contacts);
+            connection.SendMessage(CommandSet.Contacts, String.Join(";", contacts));
         }
 
-        public void SetConnection(TcpClient connection, int commandsPort)
+        public void SetConnection(Connection connection, int commandsPort)
         {
-            this.connection = new Connection(connection, commandsPort, LogoutUser, timeout);
+            this.connection = new Connection(connection, commandsPort, LogoutUser);
         }
 
         private string CalculateSHA256(string text, string salt)
@@ -119,7 +249,6 @@ namespace Epyks_Serwer
 
         private void LogoutUser()
         {
-            timeout.Stop();
             connection.Disconnect();
             UserCollection.Remove(this);
             Console.WriteLine("Wylogowano użytkownika: " + Login);
@@ -131,14 +260,26 @@ namespace Epyks_Serwer
             connection.SendMessage(CommandSet.Alive); // jeśli przesłanie komunikatu się nie powiedzie to znaczy, że użytkownik zostął niespodziewanie odłączony
         }
 
-        public void FriendStatusChanged(User user, bool isLoggingIn)
+        public void FriendStatusChanged(User calledBy, bool isLoggingIn)
         {
             string code = "0";
             if (isLoggingIn)
                 code = "1";
-            string message = CommandSet.StatusChanged + ";" + user.Login + ";" + code;
+            string message = CommandSet.StatusChanged + ";" + calledBy.Login + ";" + code;
             connection.SendMessageUDP(message);
-            Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie statusu użytkownika " + user.Login);
+            Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie statusu użytkownika " + calledBy.Login);
+        }
+
+        public void NewInvitation(User calledBy, string message)
+        {
+            string msg = CommandSet.NewInvitation + ";" + calledBy.Login + ";" + calledBy.Name + ";" + message;
+            connection.SendMessageUDP(msg);
+            Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie nowym zaproszeniu od " + calledBy.Login);
+        }
+
+        private string GetIPString()
+        {
+            return connection.GetIPString();
         }
     }
 

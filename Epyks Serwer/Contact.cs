@@ -7,6 +7,12 @@ namespace Epyks_Serwer
         public string Login { get; private set; }
         public string Name { get; private set; }
 
+        public Contact(string login, string name)
+        {
+            Login = login;
+            Name = name;
+        }
+
         public Contact(int ID, string login, string name)
         {
             this.ID = ID;

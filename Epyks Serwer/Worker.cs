@@ -3,7 +3,6 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace Epyks_Serwer
@@ -46,87 +45,81 @@ namespace Epyks_Serwer
             System.Timers.Timer timeout = new System.Timers.Timer(5000); // timer ustawiony na 5 sekund, tyle czasu ma klient na przesłanie danych
             timeout.Elapsed += delegate { onConnectionTimeoutEvent(connectionThread, userConnection); };
             timeout.Start();
-            NetworkStream stream = userConnection.GetStream();
-            byte[] data = new byte[128]; // bufor do odbioru danych
-            int count = stream.Read(data, 0, data.Length);
-            if (count != 0)
+            Connection connection = new Connection(userConnection);
+            connection.ReceiveMessage();
+            if (connection.Command == CommandSet.Login || connection.Command == CommandSet.Register)
             {
-                string message = Encoding.UTF8.GetString(data, 0, count);
-                string[] parameters = Regex.Split(message, ";"); // z otrzymanej wiadomości odczytujemy login oraz hasło
-                if (parameters.Length == 4) // spodziewamy się tylko czterech parametrów, w innym przypadku kończymy połączenie
+                if (UserCollection.IsOnline(connection[0]))
                 {
-                    string connectionCommand = parameters[0];
-                    string login = parameters[1];
-                    string password = parameters[2];
+                    connection.SendMessage(CommandSet.AuthFail, ErrorMessageID.UserAlreadyLoggedIn);
+                    connection.Disconnect();
+                    return;
+                }
+                int commandsPort = 0;  // na tym porcie ustanawiane jest pomocnicze połączenie do transmisji komunikatów
+                bool isNewUser = false;
+                string login = connection[0];
+                string password = connection[1];
+                string name = null;
 
-                    if (connectionCommand != CommandSet.Login && connectionCommand != CommandSet.Register)
+                if (connection.Command == CommandSet.Login)
+                {
+                    if (!Int32.TryParse(connection[2], out commandsPort) || commandsPort < 1 || commandsPort > 65535)
                     {
-                        userConnection.Close();
+                        connection.Disconnect();
                         return;
-                    }
-
-                    if (UserCollection.IsOnline(login))
-                    {
-                        WriteMessage(stream, CommandSet.AuthFail + ";" + (int)ErrorMessageID.UserAlreadyLoggedIn);
-                        userConnection.Close();
-                        return;
-                    }
-
-                    int commandsPort; // na tym porcie ustanawiane jest pomocnicze połączenie do transmisji komunikatóww
-                    if (!Int32.TryParse(parameters[3], out commandsPort) || commandsPort < 1 || commandsPort > 65535)
-                    {
-                        userConnection.Close();
-                        return;
-                    }
-
-                    User user;
-                    NetworkCredential userCredential;
-                    try
-                    {
-                        userCredential = new NetworkCredential(login, password);
-                    }
-                    catch // jeśli dane podane przez klienta mają nieprawidłowy format
-                    {
-                        userConnection.Close();
-                        return;
-                    }
-                    timeout.Stop();
-
-                    bool isNewUser = connectionCommand == CommandSet.Register;
-                    int errorMessageID = 0; //ewentualna odpowiedz bazy danych w przypadku błędu
-
-                    bool isValidUser;
-
-                    lock (ThreadSync.Lock)
-                    {
-                        isValidUser = Database.TryGetUser(out user, userCredential, ref errorMessageID, isNewUser); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
-                    }
-
-                    if (!isValidUser)
-                    {
-                        WriteMessage(stream, CommandSet.AuthFail + ";" + errorMessageID);
-                        userConnection.Close();
-                        return;
-                    }
-                    else
-                    {
-                        Console.WriteLine("Zalogowano użytkownika: " + login);
-                        WriteMessage(stream, CommandSet.AuthSuccess);
-                        // przesyłamy referencje do danych które nie są znane bazie danych
-                        user.SetConnection(userConnection, commandsPort);
-                        user.UpdateContactsList();
-                        UserCollection.Add(user); // odnotowujemy że dany użytkownik stał się online 
-                        user.DoWork(connectionThread); // dalsza obsługa klienta
                     }
                 }
-                else
+                else if (connection.Command == CommandSet.Register)
+                {
+                    if (!Int32.TryParse(connection[3], out commandsPort) || commandsPort < 1 || commandsPort > 65535)
+                    {
+                        connection.Disconnect();
+                        return;
+                    }
+                    isNewUser = true;
+                    name = connection[2];
+                    Console.WriteLine(name);
+                }
+                User user;
+                NetworkCredential userCredential;
+                try
+                {
+                    userCredential = new NetworkCredential(login, password);
+                }
+                catch // jeśli dane podane przez klienta mają nieprawidłowy format
                 {
                     userConnection.Close();
                     return;
                 }
+                timeout.Stop();
+                string errorMessageID = ErrorMessageID.UnknownError; //ewentualna odpowiedz bazy danych w przypadku błędu
+
+                bool isValidUser;
+
+                lock (ThreadSync.Lock)
+                {
+                    isValidUser = Database.TryGetUser(out user, userCredential, ref errorMessageID, isNewUser, name); // sprawdzamy czy użytkownik istnieje w bazie danych oraz czy podał prawidłowe hasło
+                }
+
+                if (!isValidUser)
+                {
+                    connection.SendMessage(CommandSet.AuthFail, errorMessageID);
+                    connection.Disconnect();
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine("Zalogowano użytkownika: " + login);
+                    connection.SendMessage(CommandSet.AuthSuccess);
+                    // przesyłamy referencje do danych które nie są znane bazie danych
+                    user.SetConnection(connection, commandsPort);
+                    user.UpdateContactsList();
+                    UserCollection.Add(user); // odnotowujemy że dany użytkownik stał się online 
+                    user.DoWork(connectionThread); // dalsza obsługa klienta
+                }
             }
             else
-                userConnection.Close();
+                connection.Disconnect();
         }
 
         private void onConnectionTimeoutEvent(Thread connectionThread, TcpClient connection) // zdarzanie występujące przy zbyt długej odpowiedzi na klienta
