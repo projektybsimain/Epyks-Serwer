@@ -56,7 +56,7 @@ namespace Ekyps_Serwer
                 message = ErrorMessageID.UnknownError;
                 return false;
             }
-            bool userExists = UserExists(user);
+            bool userExists = UserExists(user.Login);
             if (isNewUser && userExists) // jeśli użytkownik chce się zarejestrować przy użyciu zajętego już loginu
             {
                 message = ErrorMessageID.UsernameTaken;
@@ -77,7 +77,7 @@ namespace Ekyps_Serwer
                 user.ID = GetUserID(user.Login);
                 return true;
             }
-            else if (!isNewUser && !VerifyUser(user))
+            else if (!isNewUser && !VerifyUser(user.Login, user.PasswordHash))
             {
                 message = ErrorMessageID.InvalidUserCredential;
                 return false;
@@ -86,20 +86,10 @@ namespace Ekyps_Serwer
             return true;
         }
 
-        private static int GetUserID(string login)
-        {
-            string commandText = "SELECT UserID FROM Users WHERE Login = '" + login + "'";
-            SQLiteCommand command = new SQLiteCommand(commandText, connection);
-            SQLiteDataReader reader = command.ExecuteReader();
-            if (!reader.Read())
-                return -1;
-            return reader.GetInt32(0);
-        }
-
-        public static List<Contact> GetContactsList(User user)
+        public static List<Contact> GetContactsList(int userID)
         {
             List<Contact> friends = new List<Contact>();
-            string commandText = "SELECT ContactID FROM Contacts WHERE UserID = '" + user.ID + "'";
+            string commandText = "SELECT ContactID FROM Contacts WHERE UserID = '" + userID + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             List<int> contacts = new List<int>();
@@ -120,20 +110,39 @@ namespace Ekyps_Serwer
             return friends;
         }
 
-        public static List<Invitation> GetInvitationsList(User user)
+        public static List<Invitation> GetInvitationsList(string login)
         {
             List<Invitation> invitations = new List<Invitation>();
-            string commandText = "SELECT * FROM Invitations WHERE UserID = '" + user.ID + "'";
+            string commandText = "SELECT * FROM Invitations WHERE TargetLogin = '" + login + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read())
             {
-                invitations.Add(new Invitation(reader[0].ToString(), reader[1].ToString(), reader[2].ToString()));
+                string inviterLogin = GetUserLogin((int)reader["UserID"]);
+                string name = GetUserName(inviterLogin);
+                invitations.Add(new Invitation(inviterLogin, name, reader["Message"].ToString()));
             }
             return invitations;
         }
 
-        public static List<Contact> FindUsers(string searchFor, string except) // nie odnajdujemy loginu dla użytkownika który jest wyszukującm
+        public static bool RemoveInvitation(string login, string targetLogin)
+        {
+            int id = GetUserID(login);
+            if (id == -1)
+                return false;
+            if (!InviteExists(id, targetLogin))
+                return false;
+            string commandText = "DELETE FROM Invitations WHERE UserID = '" + id + "' AND TargetLogin = '" + targetLogin + "'";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            return command.ExecuteNonQuery() == 1;
+        }
+
+        public static void AddContact(string userLogin, string contactLogin)
+        {
+
+        }
+
+        public static List<Contact> FindUsers(string searchFor, string except) // nie odnajdujemy loginu dla użytkownika który jest wyszukującym
         {
             List<Contact> usersFound = new List<Contact>();
             string commandText = "SELECT Login, Name FROM Users";
@@ -144,11 +153,10 @@ namespace Ekyps_Serwer
                 string login = reader["Login"].ToString();
                 if (login != except)
                 {
-                    
+                    string name = reader["Name"].ToString();
+                    if (LevenshteinDistance.AreSimilar(searchFor, login) || LevenshteinDistance.AreSimilar(searchFor, name))
+                        usersFound.Add(new Contact(login, name));
                 }
-                string name = reader["Name"].ToString();
-                if (LevenshteinDistance.AreSimilar(searchFor, login) || LevenshteinDistance.AreSimilar(searchFor, name))
-                    usersFound.Add(new Contact(login, name));
             }
             return usersFound;
         }
@@ -160,61 +168,68 @@ namespace Ekyps_Serwer
             command.ExecuteNonQuery();
         }
 
-        private static bool UserExists(User user)
+        private static bool UserExists(string userLogin)
         {
-            string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' LIMIT 1";
+            string commandText = "SELECT * FROM Users WHERE Login = '" + userLogin + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteScalar() != null;
         }
 
-        public static bool AddInvite(User user, string inviterLogin, string message)
+        public static bool AddInvite(User inviter, string targetLogin, string message)
         {
             if (message.Length > 256)
                 message.Substring(0, 256);
-            /*int inviterID = GetUserID(inviterLogin);
-            if (inviterID == -1 || InviteExists(user, inviterLogin, inviterID))
-                return false;*/
-            if (InviteExists(user, inviterLogin))
-            {
+            if (InviteExists(inviter.ID, targetLogin) || !UserExists(targetLogin))
                 return false;
-            }
-            string commandText = "INSERT INTO Invitations (UserID, TargetLogin, Message) VALUES ('" + user.ID + "', '" + inviterLogin + "', '" + message + "')";
+            string commandText = "INSERT INTO Invitations (UserID, TargetLogin, Message) VALUES ('" + inviter.ID + "', '" + targetLogin + "', '" + message + "')";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
             return true;
         }
 
-        private static bool InviteExists(User user, string inviterLogin)
+        private static bool InviteExists(int userID, string inviterLogin)
         {
-            string commandText = "SELECT * FROM Invitations WHERE UserID = '" + user.ID + "' AND TargetLogin = '" + inviterLogin + "' LIMIT 1";
+            string commandText = "SELECT * FROM Invitations WHERE UserID = '" + userID + "' AND TargetLogin = '" + inviterLogin + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteScalar() != null;
         }
 
-        private static bool VerifyUser(User user)
+        private static bool VerifyUser(string login, string password)
         {
-            string commandText = "SELECT * FROM Users WHERE Login = '" + user.Login + "' AND Password = '" + user.PasswordHash + "' LIMIT 1";
+            string commandText = "SELECT * FROM Users WHERE Login = '" + login + "' AND Password = '" + password + "' LIMIT 1";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteScalar() != null;
         }
 
-        public static void ChangeUserPassword(User user)
+        public static void ChangeValue(int userID, string tableName, string valueName, string value)
         {
-            string commandText = "UPDATE Users SET Password = '" + user.PasswordHash + "' WHERE UserID = '" + user.ID + "'";
+            string commandText = "UPDATE " + tableName + "SET " + valueName + " = '" + value + "' WHERE UserID = '" + userID + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
         }
 
-        public static void ChangeUserName(User user)
+        public static string GetUserName(string login)
         {
-            string commandText = "UPDATE Users SET Name = '" + user.Name + "' WHERE UserID = '" + user.ID + "'";
+            string commandText = "SELECT Name FROM Users WHERE Login = '" + login + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
-            command.ExecuteNonQuery();
+            SQLiteDataReader reader = command.ExecuteReader();
+            reader.Read();
+            return reader[0].ToString();
         }
 
-        public static string GetUserName(User user)
+        private static int GetUserID(string login)
         {
-            string commandText = "SELECT Name FROM Users WHERE UserID = '" + user.ID + "'";
+            string commandText = "SELECT UserID FROM Users WHERE Login = '" + login + "'";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            SQLiteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+                return -1;
+            return reader.GetInt32(0);
+        }
+
+        private static string GetUserLogin(int userID)
+        {
+            string commandText = "SELECT Login FROM Users WHERE UserID = '" + userID + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             reader.Read();

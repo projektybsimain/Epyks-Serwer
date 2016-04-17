@@ -34,7 +34,7 @@ namespace Epyks_Serwer
         public void DoWork(Thread thread) // potrzebna referencja do wątku by móc zareagować na timeout
         {
             if (String.IsNullOrEmpty(Name))
-                Name = Database.GetUserName(this);
+                Name = Database.GetUserName(Login);
             this.thread = thread;
             while (true)
             {
@@ -42,7 +42,7 @@ namespace Epyks_Serwer
                 if (connection.Command == CommandSet.Logout)
                     LogoutUser();
                 else if (connection.Command == CommandSet.Contacts)
-                    GetContacts();
+                    SendContacts();
                 else if (connection.Command == CommandSet.ChangePass)
                     ChangePassword();
                 else if (connection.Command == CommandSet.Call)
@@ -56,11 +56,11 @@ namespace Epyks_Serwer
                 else if (connection.Command == CommandSet.ChangeName)
                     ChangeName();
                 else if (connection.Command == CommandSet.GetName)
-                    GetName();
+                    SendName();
                 else if (connection.Command == CommandSet.Invite)
                     Invite();
                 else if (connection.Command == CommandSet.Invitations)
-                    GetInvitations();
+                    SendInvitations();
                 else if (connection.Command == CommandSet.AcceptInvite)
                     AcceptInvite();
                 else if (connection.Command != CommandSet.LongMessage) // ignorujemy wiadomości typu LONG_MSG
@@ -70,12 +70,32 @@ namespace Epyks_Serwer
 
         private void AcceptInvite()
         {
-
+            string inviterLogin = connection[0];
+            if (!Database.RemoveInvitation(inviterLogin, Login))
+                return;
+            Database.AddContact(inviterLogin, Login);
+            Database.AddContact(Login, inviterLogin);
+            try
+            {
+                User targetUser = UserCollection.GetUserByLogin(inviterLogin);
+                targetUser.InvitationAccepted(this);
+            }
+            catch
+            {
+                // jeśli użytkownik nie jest online to nie robimy nic
+            }
+            SendContacts();
         }
 
-        private void GetInvitations()
+        private void RejectInvite()
         {
-            List<Invitation> invitations = Database.GetInvitationsList(this);
+            string inviterLogin = connection[0];
+            Database.RemoveInvitation(inviterLogin, Login);
+        }
+
+        private void SendInvitations()
+        {
+            List<Invitation> invitations = Database.GetInvitationsList(Login);
             string[] array = new string[invitations.Count];
             for (int i = 0; i < array.Length; i++)
             {
@@ -84,7 +104,7 @@ namespace Epyks_Serwer
             connection.SendMessage(CommandSet.Invitations, String.Join(";", array));
         }
 
-        private void Invite() // WYSYŁANIE ZAPROSZENIA JEŚLI ZNAJOMY JEST ONLINE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        private void Invite()
         {
             string targetLogin = connection[0];
             if (String.IsNullOrEmpty(targetLogin) || targetLogin == Login)
@@ -111,7 +131,7 @@ namespace Epyks_Serwer
             }
         }
 
-        private void GetName()
+        private void SendName()
         {
             connection.SendMessage(CommandSet.Name, Name);
         }
@@ -127,7 +147,7 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidName);
                 return;
             }
-            Database.ChangeUserName(this);
+            Database.ChangeValue(ID, "Users", "Name", Name);
         }
 
         public void SetName(string name)
@@ -199,18 +219,18 @@ namespace Epyks_Serwer
                 return;
             }
             PasswordHash = CalculateSHA256(connection[1].Trim(), Login);
-            Database.ChangeUserPassword(this);
+            Database.ChangeValue(ID, "Users", "Password", PasswordHash);
             connection.SendMessage(CommandSet.OK);
         }
 
         public void UpdateContactsList()
         {
-            ContactsList = Database.GetContactsList(this);
+            ContactsList = Database.GetContactsList(ID);
         }
 
-        public void GetContacts()
+        public void SendContacts()
         {
-            ContactsList = Database.GetContactsList(this);
+            ContactsList = Database.GetContactsList(ID);
             string[] contacts = new string[ContactsList.Count];
             for (int i = 0; i < contacts.Length; i++)
             {
@@ -275,6 +295,12 @@ namespace Epyks_Serwer
             string msg = CommandSet.NewInvitation + ";" + calledBy.Login + ";" + calledBy.Name + ";" + message;
             connection.SendMessageUDP(msg);
             Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie nowym zaproszeniu od " + calledBy.Login);
+        }
+
+        public void InvitationAccepted(User calledBy)
+        {
+            string msg = CommandSet.InvitationAccepted + ";" + calledBy.Login + ";" + calledBy.Name;
+            connection.SendMessageUDP(msg);
         }
 
         private string GetIPString()

@@ -30,8 +30,9 @@ namespace Epyks_Serwer
         public static readonly Command GetName = new Command("GET_NAME");
         public static readonly Command Name = new Command("NAME");
         public static readonly Command NewInvitation = new Command("NEW_INVITATION", 3);
-        public static readonly Command AcceptInvite = new Command("ACCEPT_INVITE", 1);
-        public static readonly Command RejectInvite = new Command("REJECT_INVITE", 1);
+        public static readonly Command AcceptInvite = new Command("ACCEPT_INVIT", 1);
+        public static readonly Command RejectInvite = new Command("REJECT_INVIT", 1);
+        public static readonly Command InvitationAccepted = new Command("INVIT_ACCEPTED", 2);
 
         public static bool IsKnownCommand(string command)
         {
