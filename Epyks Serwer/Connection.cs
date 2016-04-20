@@ -87,6 +87,8 @@ namespace Epyks_Serwer
 
         public void SendMessage(Command command, params string[] parameters)
         {
+            if (command.ParametersCount > 0 && command.ParametersCount != parameters.Length) // zabezpiecza przed wysłaniem niekomatybilnego komunikatu
+                throw new ArgumentOutOfRangeException("Command", "Command has less or more parameters than required");
             for (int i = 0; i < parameters.Length; i++)
                 parameters[i] = parameters[i]; // usuwa średnik z wiadomości ze względu na ich użycie przy podziale komunikatów
             byte[] bytes = Encoding.UTF8.GetBytes(String.Join(";", command.Text, String.Join(";", parameters)));

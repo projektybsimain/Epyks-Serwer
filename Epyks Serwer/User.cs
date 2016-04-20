@@ -63,6 +63,8 @@ namespace Epyks_Serwer
                     SendInvitations();
                 else if (connection.Command == CommandSet.AcceptInvite)
                     AcceptInvite();
+                else if (connection.Command == CommandSet.RejectInvite)
+                    RejectInvite();
                 else if (connection.Command != CommandSet.LongMessage) // ignorujemy wiadomości typu LONG_MSG
                     connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
             }
