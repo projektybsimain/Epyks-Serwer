@@ -113,14 +113,15 @@ namespace Ekyps_Serwer
         public static List<Invitation> GetInvitationsList(string login)
         {
             List<Invitation> invitations = new List<Invitation>();
-            string commandText = "SELECT * FROM Invitations WHERE TargetLogin = '" + login + "'";
+            string commandText = "SELECT * FROM Invitations WHERE TargetLogin = '" + login.ToLower() + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             while (reader.Read())
             {
-                string inviterLogin = GetUserLogin((int)reader["UserID"]);
-                string name = GetUserName(inviterLogin);
-                invitations.Add(new Invitation(inviterLogin, name, reader["Message"].ToString()));
+                string inviterLogin = GetUserLogin(reader["UserID"].ToString());
+                string inviterName = GetUserName(inviterLogin);
+                string invitationMessage = reader["Message"].ToString();
+                invitations.Add(new Invitation(inviterLogin, inviterName, invitationMessage));
             }
             return invitations;
         }
@@ -175,7 +176,7 @@ namespace Ekyps_Serwer
             return command.ExecuteScalar() != null;
         }
 
-        public static bool AddInvite(User inviter, string targetLogin, string message)
+        public static bool AddInvitation(User inviter, string targetLogin, string message)
         {
             if (message.Length > 256)
                 message.Substring(0, 256);
@@ -203,7 +204,7 @@ namespace Ekyps_Serwer
 
         public static void ChangeValue(int userID, string tableName, string valueName, string value)
         {
-            string commandText = "UPDATE " + tableName + "SET " + valueName + " = '" + value + "' WHERE UserID = '" + userID + "'";
+            string commandText = "UPDATE " + tableName + " SET " + valueName + " = '" + value + "' WHERE UserID = '" + userID + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
         }
@@ -227,7 +228,7 @@ namespace Ekyps_Serwer
             return reader.GetInt32(0);
         }
 
-        private static string GetUserLogin(int userID)
+        private static string GetUserLogin(string userID)
         {
             string commandText = "SELECT Login FROM Users WHERE UserID = '" + userID + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);

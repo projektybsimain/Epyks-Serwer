@@ -57,7 +57,7 @@ namespace Epyks_Serwer
                 }
                 int commandsPort = 0;  // na tym porcie ustanawiane jest pomocnicze połączenie do transmisji komunikatów
                 bool isNewUser = false;
-                string login = connection[0];
+                string login = connection[0].ToLower();
                 string password = connection[1];
                 string name = null;
 

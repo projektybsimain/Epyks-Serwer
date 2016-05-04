@@ -117,7 +117,7 @@ namespace Epyks_Serwer
             string message = connection[1];
             if (message.Trim().Length == 0) // pozbywamy się pustych wiadomości
                 message = String.Empty;
-            if (!Database.AddInvite(this, targetLogin, message))
+            if (!Database.AddInvitation(this, targetLogin, message))
             {
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
@@ -154,7 +154,8 @@ namespace Epyks_Serwer
 
         public void SetName(string name)
         {
-            if (String.IsNullOrEmpty(name.Trim()) || name.Length > 48 || name.IndexOf(';') >= 0)
+            name = name.Trim();
+            if (String.IsNullOrEmpty(name) || name.Length > 48 || name.IndexOf(';') >= 0)
                 throw new Exception();
             Name = name;
         }
