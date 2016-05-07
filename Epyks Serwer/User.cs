@@ -66,9 +66,61 @@ namespace Epyks_Serwer
                     AcceptInvite();
                 else if (connection.Command == CommandSet.RejectInvite)
                     RejectInvite();
+                else if (connection.Command == CommandSet.Remove)
+                    RemoveContact();
+                else if (connection.Command == CommandSet.Block)
+                    BlockUser();
+                else if (connection.Command == CommandSet.Unlock)
+                    UnlockUser();
+                else if (connection.Command == CommandSet.BlockedUsers)
+                    SendBlockedList();
                 else if (connection.Command != CommandSet.LongMessage) // ignorujemy wiadomości typu LONG_MSG
                     connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
             }
+        }
+
+        private void SendBlockedList()
+        {
+            string[] blockedLogins = Database.GetBlockedList(Login).ToArray();
+            connection.SendMessage(CommandSet.Invitations, String.Join(";", blockedLogins));
+        }
+
+        private void UnlockUser()
+        {
+            string toUnlockLogin = connection[0];
+            if (String.IsNullOrEmpty(toUnlockLogin) || toUnlockLogin == Login)
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            Database.RemoveBlocked(Login, toUnlockLogin);
+        }
+
+        private void BlockUser()
+        {
+            string blockedLogin = connection[0];
+            if (String.IsNullOrEmpty(blockedLogin) || blockedLogin == Login)
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            Database.RemoveContact(Login, blockedLogin);
+            Database.RemoveContact(blockedLogin, Login);
+            Database.AddBlocked(Login, blockedLogin);
+            SendContacts();
+        }
+
+        private void RemoveContact()
+        {
+            string contactLogin = connection[0];
+            if (String.IsNullOrEmpty(contactLogin) || contactLogin == Login)
+            {
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                return;
+            }
+            Database.RemoveContact(Login, contactLogin);
+            Database.RemoveContact(contactLogin, Login);
+            SendContacts();
         }
 
         private void AcceptInvite()

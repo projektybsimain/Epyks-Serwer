@@ -33,6 +33,8 @@ namespace Epyks_Serwer
         public static readonly Command AcceptInvite = new Command("ACCEPT_INVIT", 1);
         public static readonly Command RejectInvite = new Command("REJECT_INVIT", 1);
         public static readonly Command InvitationAccepted = new Command("INVIT_ACCEPTED", 2);
+        public static readonly Command Remove = new Command("REMOVE", 1);
+        public static readonly Command BlockedUsers = new Command("BLOCKED_USERS");
 
         public static bool IsKnownCommand(string command)
         {
