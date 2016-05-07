@@ -113,10 +113,7 @@ namespace Ekyps_Serwer
         public static void AddContact(string userLogin, string contactLogin)
         {
             if (ContactExists(userLogin, contactLogin) || !UserExists(userLogin) || !UserExists(contactLogin))
-            {
-                Console.WriteLine("EXIST");
                 return;
-            }
             string commandText = "INSERT INTO Contacts (Login, ContactLogin) VALUES ('" + userLogin + "', '" + contactLogin + "')";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             command.ExecuteNonQuery();
