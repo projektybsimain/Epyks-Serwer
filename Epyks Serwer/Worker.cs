@@ -78,7 +78,6 @@ namespace Epyks_Serwer
                     }
                     isNewUser = true;
                     name = connection[2];
-                    Console.WriteLine(name);
                 }
                 User user;
                 NetworkCredential userCredential;

@@ -29,7 +29,7 @@ namespace Ekyps_Serwer
                 string commandText = "CREATE TABLE Users (UserID INTEGER PRIMARY KEY AUTOINCREMENT, Login varchar(24) NOT NULL, Name nvarchar(48) NOT NULL, Password varchar(255) NOT NULL);";
                 SQLiteCommand command = new SQLiteCommand(commandText, connection);
                 command.ExecuteNonQuery();
-                commandText = "CREATE TABLE Contacts (UserID INTEGER, ContactID INTEGER, FOREIGN KEY(UserID) REFERENCES Users(UserID), FOREIGN KEY(ContactID) REFERENCES Users(UserID));";
+                commandText = "CREATE TABLE Contacts (Login varchar(24) NOT NULL, ContactLogin varchar(24) NOT NULL);";
                 command = new SQLiteCommand(commandText, connection);
                 command.ExecuteNonQuery();
                 commandText = "CREATE TABLE Invitations (UserID INTEGER, TargetLogin varchar(24), Message nvarchar(256), FOREIGN KEY(UserID) REFERENCES Users(UserID));";
@@ -86,28 +86,47 @@ namespace Ekyps_Serwer
             return true;
         }
 
-        public static List<Contact> GetContactsList(int userID)
+        public static List<Contact> GetContactsList(string login)
         {
             List<Contact> friends = new List<Contact>();
-            string commandText = "SELECT ContactID FROM Contacts WHERE UserID = '" + userID + "'";
+            string commandText = "SELECT ContactLogin FROM Contacts WHERE Login = '" + login + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
-            List<int> contacts = new List<int>();
+            List<string> contacts = new List<string>();
             while (reader.Read())
             {
-                contacts.Add((int)reader["ContactID"]); // wczytujemy identyfikatory wszystkich znajomych
+                contacts.Add(reader["ContactLogin"].ToString()); // wczytujemy identyfikatory wszystkich znajomych
             }
             reader.Close();
-            foreach (int contactID in contacts)
+            foreach (string contactLogin in contacts)
             {
-                command.CommandText = "SELECT Login, Name FROM Users WHERE UserID = '" + contactID + "'";
+                command.CommandText = "SELECT Name FROM Users WHERE Login = '" + contactLogin + "'";
                 reader = command.ExecuteReader();
                 reader.Read();
-                string login = reader["Login"].ToString();
                 string name = reader["Name"].ToString();
-                friends.Add(new Contact(contactID, login, name));
+                friends.Add(new Contact(contactLogin, name));
+                reader.Close();
             }
             return friends;
+        }
+
+        public static void AddContact(string userLogin, string contactLogin)
+        {
+            if (ContactExists(userLogin, contactLogin) || !UserExists(userLogin) || !UserExists(contactLogin))
+            {
+                Console.WriteLine("EXIST");
+                return;
+            }
+            string commandText = "INSERT INTO Contacts (Login, ContactLogin) VALUES ('" + userLogin + "', '" + contactLogin + "')";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            command.ExecuteNonQuery();
+        }
+
+        private static bool ContactExists(string userLogin, string contactLogin)
+        {
+            string commandText = "SELECT * FROM Contacts WHERE Login = '" + userLogin + "' AND ContactLogin = '" + contactLogin + "' LIMIT 1";
+            SQLiteCommand command = new SQLiteCommand(commandText, connection);
+            return command.ExecuteScalar() != null;
         }
 
         public static List<Invitation> GetInvitationsList(string login)
@@ -123,6 +142,7 @@ namespace Ekyps_Serwer
                 string invitationMessage = reader["Message"].ToString();
                 invitations.Add(new Invitation(inviterLogin, inviterName, invitationMessage));
             }
+            reader.Close();
             return invitations;
         }
 
@@ -136,11 +156,6 @@ namespace Ekyps_Serwer
             string commandText = "DELETE FROM Invitations WHERE UserID = '" + id + "' AND TargetLogin = '" + targetLogin + "'";
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             return command.ExecuteNonQuery() == 1;
-        }
-
-        public static void AddContact(string userLogin, string contactLogin)
-        {
-
         }
 
         public static List<Contact> FindUsers(string searchFor, string except) // nie odnajdujemy loginu dla użytkownika który jest wyszukującym
@@ -159,6 +174,7 @@ namespace Ekyps_Serwer
                         usersFound.Add(new Contact(login, name));
                 }
             }
+            reader.Close();
             return usersFound;
         }
 
@@ -178,6 +194,7 @@ namespace Ekyps_Serwer
 
         public static bool AddInvitation(User inviter, string targetLogin, string message)
         {
+            message = message.Trim();
             if (message.Length > 256)
                 message.Substring(0, 256);
             if (InviteExists(inviter.ID, targetLogin) || !UserExists(targetLogin))
@@ -215,7 +232,9 @@ namespace Ekyps_Serwer
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             reader.Read();
-            return reader[0].ToString();
+            string userName = reader[0].ToString();
+            reader.Close();
+            return userName;
         }
 
         private static int GetUserID(string login)
@@ -225,7 +244,9 @@ namespace Ekyps_Serwer
             SQLiteDataReader reader = command.ExecuteReader();
             if (!reader.Read())
                 return -1;
-            return reader.GetInt32(0);
+            int id = reader.GetInt32(0);
+            reader.Close();
+            return id;
         }
 
         private static string GetUserLogin(string userID)
@@ -234,7 +255,9 @@ namespace Ekyps_Serwer
             SQLiteCommand command = new SQLiteCommand(commandText, connection);
             SQLiteDataReader reader = command.ExecuteReader();
             reader.Read();
-            return reader[0].ToString();
+            string userLogin = reader[0].ToString();
+            reader.Close();
+            return userLogin;
         }
     }
 }

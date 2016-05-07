@@ -1,6 +1,7 @@
 ﻿using Ekyps_Serwer;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -129,6 +130,7 @@ namespace Epyks_Serwer
             }
             catch
             {
+                Debug.WriteLine("Użytkownik " + targetLogin + " nie jest online");
                 // jeśli użytkownik nie jest online to nie robimy nic
             }
         }
@@ -221,25 +223,25 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidPassword);
                 return;
             }
-            PasswordHash = CalculateSHA256(connection[1].Trim(), Login);
+            PasswordHash = CalculateSHA256(connection[1], Login);
             Database.ChangeValue(ID, "Users", "Password", PasswordHash);
             connection.SendMessage(CommandSet.OK);
         }
 
         public void UpdateContactsList()
         {
-            ContactsList = Database.GetContactsList(ID);
+            ContactsList = Database.GetContactsList(Login);
         }
 
         public void SendContacts()
         {
-            ContactsList = Database.GetContactsList(ID);
+            ContactsList = Database.GetContactsList(Login);
             string[] contacts = new string[ContactsList.Count];
             for (int i = 0; i < contacts.Length; i++)
             {
                 Contact contact = ContactsList[i];
                 string code = "0";
-                if (UserCollection.IsOnline(contact.ID));
+                if (UserCollection.IsOnline(contact.Login))
                     code = "1";
                 contacts[i] = contact.ToString() + ";" + code;
             }

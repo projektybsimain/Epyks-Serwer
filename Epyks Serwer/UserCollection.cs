@@ -16,7 +16,7 @@ namespace Epyks_Serwer
                 {
                     foreach (User userOnline in usersOnline)
                     {
-                        if (userOnline.ID == contact.ID)
+                        if (userOnline.Login == contact.Login)
                         {
                             queue.Add(userOnline);
                             break; // unikamy przeglądania całej listy, interesuje nas pierwsze wsytąpienie
@@ -38,7 +38,7 @@ namespace Epyks_Serwer
                 {
                     foreach (User userOnline in usersOnline)
                     {
-                        if (userOnline.ID == contact.ID)
+                        if (userOnline.Login == contact.Login)
                         {
                             queue.Add(userOnline);
                             break; // unikamy przeglądania całej listy, interesuje nas pierwsze wsytąpienie

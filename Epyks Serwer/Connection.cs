@@ -135,6 +135,10 @@ namespace Epyks_Serwer
         {
             get
             {
+                if (parameters == null || index >= parameters.Length)
+                    return null;
+                if (index == parameters.Length - 1)
+                    return parameters[index].Trim(); // pozbywamy się pustych znaków będących pozostałością bufora
                 return parameters[index];
             }
         }
