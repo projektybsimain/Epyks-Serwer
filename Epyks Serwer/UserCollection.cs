@@ -52,20 +52,29 @@ namespace Epyks_Serwer
 
         public static bool IsOnline(int ID)
         {
-            return usersOnline.Exists(item => item.ID == ID);
+            lock (ThreadSync.Lock)
+            {
+                return usersOnline.Exists(item => item.ID == ID);
+            }
         }
 
         public static bool IsOnline(string login)
         {
-            return usersOnline.Exists(item => item.Login == login);
+            lock (ThreadSync.Lock)
+            {
+                return usersOnline.Exists(item => item.Login == login);
+            }
         }
 
         public static User GetUserByLogin(string login)
         {
-            foreach(User user in usersOnline)
+            lock (ThreadSync.Lock)
             {
-                if (user.Login == login)
-                    return user;
+                foreach (User user in usersOnline)
+                {
+                    if (user.Login == login)
+                        return user;
+                }
             }
             throw new KeyNotFoundException();
         }

@@ -2,10 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -28,7 +25,7 @@ namespace Epyks_Serwer
             Login = credential.UserName.ToLower();
             if (Login.Length > 24 || ValidateLogin() == false) // jeśli login jest dłuższy niż 24 znaki lub zawiera niedozwolone znaki
                 throw new InvalidUsernameException();
-            PasswordHash = CalculateSHA256(credential.Password.Trim(), Login);
+            PasswordHash = ChecksumProvider.CalculateSHA256(credential.Password.Trim(), Login);
             IsBusy = false;
             Name = null;
         }
@@ -82,7 +79,11 @@ namespace Epyks_Serwer
 
         private void SendBlockedList()
         {
-            string[] blockedLogins = Database.GetBlockedList(Login).ToArray();
+            string[] blockedLogins;
+            lock (ThreadSync.Lock)
+            {
+                blockedLogins = Database.GetBlockedList(Login).ToArray();
+            }
             connection.SendMessage(CommandSet.Invitations, String.Join(";", blockedLogins));
         }
 
@@ -94,7 +95,10 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
             }
-            Database.RemoveBlocked(Login, toUnlockLogin);
+            lock (ThreadSync.Lock)
+            {
+                Database.RemoveBlocked(Login, toUnlockLogin);
+            }
         }
 
         public void SetClientPort(int port)
@@ -110,9 +114,12 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
             }
-            Database.RemoveContact(Login, blockedLogin);
-            Database.RemoveContact(blockedLogin, Login);
-            Database.AddBlocked(Login, blockedLogin);
+            lock (ThreadSync.Lock)
+            {
+                Database.RemoveContact(Login, blockedLogin);
+                Database.RemoveContact(blockedLogin, Login);
+                Database.AddBlocked(Login, blockedLogin);
+            }
             SendContacts();
         }
 
@@ -124,18 +131,24 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
             }
-            Database.RemoveContact(Login, contactLogin);
-            Database.RemoveContact(contactLogin, Login);
+            lock (ThreadSync.Lock)
+            {
+                Database.RemoveContact(Login, contactLogin);
+                Database.RemoveContact(contactLogin, Login);
+            }
             SendContacts();
         }
 
         private void AcceptInvite()
         {
             string inviterLogin = connection[0];
-            if (!Database.RemoveInvitation(inviterLogin, Login))
-                return;
-            Database.AddContact(inviterLogin, Login);
-            Database.AddContact(Login, inviterLogin);
+            lock (ThreadSync.Lock)
+            {
+                if (!Database.RemoveInvitation(inviterLogin, Login))
+                    return;
+                Database.AddContact(inviterLogin, Login);
+                Database.AddContact(Login, inviterLogin);
+            }
             try
             {
                 User targetUser = UserCollection.GetUserByLogin(inviterLogin);
@@ -151,12 +164,19 @@ namespace Epyks_Serwer
         private void RejectInvite()
         {
             string inviterLogin = connection[0];
-            Database.RemoveInvitation(inviterLogin, Login);
+            lock (ThreadSync.Lock)
+            {
+                Database.RemoveInvitation(inviterLogin, Login);
+            }
         }
 
         private void SendInvitations()
         {
-            List<Invitation> invitations = Database.GetInvitationsList(Login);
+            List<Invitation> invitations;
+            lock (ThreadSync.Lock)
+            {
+                invitations = Database.GetInvitationsList(Login);
+            }
             string[] array = new string[invitations.Count];
             for (int i = 0; i < array.Length; i++)
             {
@@ -176,7 +196,12 @@ namespace Epyks_Serwer
             string message = connection[1];
             if (message.Trim().Length == 0) // pozbywamy się pustych wiadomości
                 message = String.Empty;
-            if (!Database.AddInvitation(this, targetLogin, message))
+            bool result;
+            lock (ThreadSync.Lock)
+            {
+                result = Database.AddInvitation(this, targetLogin, message);
+            }
+            if (!result)
             {
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
@@ -189,7 +214,6 @@ namespace Epyks_Serwer
             catch
             {
                 Debug.WriteLine("Użytkownik " + targetLogin + " nie jest online");
-                // jeśli użytkownik nie jest online to nie robimy nic
             }
         }
 
@@ -209,7 +233,10 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidName);
                 return;
             }
-            Database.ChangeValue(ID, "Users", "Name", Name);
+            lock (ThreadSync.Lock)
+            {
+                Database.ChangeValue(ID, "Users", "Name", Name);
+            }
         }
 
         public void SetName(string name)
@@ -228,13 +255,22 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
             }
-            List<Contact> usersFound = Database.FindUsers(target, Login);
+            List<Contact> usersFound;
+            lock (ThreadSync.Lock)
+            {
+                usersFound = Database.FindUsers(target, Login);
+            }
             string[] array = new string[usersFound.Count];
             for (int i = 0; i < array.Length; i++)
             {
                 array[i] = usersFound[i].ToString();
             }
             connection.SendMessage(CommandSet.FoundUsers, String.Join(";", array));
+        }
+
+        private bool IsFriend(string targetLogin)
+        {
+            return ContactsList.FindIndex(item => item.Login == targetLogin) == -1;
         }
 
         private void Call()
@@ -245,12 +281,22 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
                 return;
             }
-            if (ContactsList.FindIndex(item => item.Login == targetLogin) == -1) // jeśli użytkownik nie jest w znajomych
+            bool isFriend;
+            lock (ThreadSync.Lock)
+            {
+                isFriend = IsFriend(targetLogin);
+            }
+            if (!isFriend)
             {
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.NotInContacts);
                 return;
             }
-            if (!UserCollection.IsOnline(targetLogin))
+            bool isOnline;
+            lock (ThreadSync.Lock)
+            {
+                isOnline = UserCollection.IsOnline(targetLogin);
+            }
+            if (!isOnline)
             {
                 connection.SendMessage(CommandSet.Call, ErrorMessageID.UserOffline);
                 return;
@@ -275,25 +321,31 @@ namespace Epyks_Serwer
 
         private void ChangePassword()
         {
-            string oldPasswordHash = CalculateSHA256(connection[0], Login);
+            string oldPasswordHash = ChecksumProvider.CalculateSHA256(connection[0], Login);
             if (oldPasswordHash != PasswordHash)
             {
                 connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidPassword);
                 return;
             }
-            PasswordHash = CalculateSHA256(connection[1], Login);
-            Database.ChangeValue(ID, "Users", "Password", PasswordHash);
+            PasswordHash = ChecksumProvider.CalculateSHA256(connection[1], Login);
+            lock (ThreadSync.Lock)
+            {
+                Database.ChangeValue(ID, "Users", "Password", PasswordHash);
+            }
             connection.SendMessage(CommandSet.OK);
         }
 
         public void UpdateContactsList()
         {
-            ContactsList = Database.GetContactsList(Login);
+            lock (ThreadSync.Lock)
+            {
+                ContactsList = Database.GetContactsList(Login);
+            }
         }
 
         public void SendContacts()
         {
-            ContactsList = Database.GetContactsList(Login);
+            UpdateContactsList();
             string[] contacts = new string[ContactsList.Count];
             for (int i = 0; i < contacts.Length; i++)
             {
@@ -309,20 +361,6 @@ namespace Epyks_Serwer
         public void SetConnection(Connection connection)
         {
             this.connection = new Connection(connection, LogoutUser);
-        }
-
-        private string CalculateSHA256(string text, string salt)
-        {
-            byte[] _text = Encoding.UTF8.GetBytes(text);
-            byte[] _salt = Encoding.UTF8.GetBytes(salt);
-            SHA256Managed crypt = new SHA256Managed();
-            StringBuilder hash = new StringBuilder();
-            byte[] crypto = crypt.ComputeHash(_text.Concat(_salt).ToArray(), 0, _text.Length + _salt.Length);
-            foreach (byte theByte in crypto)
-            {
-                hash.Append(theByte.ToString("x2"));
-            }
-            return hash.ToString();
         }
 
         private bool ValidateLogin()
