@@ -25,7 +25,6 @@ namespace Epyks_Serwer
         public static readonly Command Error = new Command("ERROR");
         public static readonly Command OK = new Command("OK");
         public static readonly Command FoundUsers = new Command("FOUND_USERS");
-        public static readonly Command LongMessage = new Command("LONG_MSG", 1);
         public static readonly Command ChangeName = new Command("CHANGE_NAME", 1);
         public static readonly Command GetName = new Command("GET_NAME");
         public static readonly Command Name = new Command("NAME");

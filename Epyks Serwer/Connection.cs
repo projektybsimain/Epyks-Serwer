@@ -11,10 +11,10 @@ namespace Epyks_Serwer
         public Command Command { get; private set; }
         string[] parameters;
         TcpClient connection;
-        UdpClient udpClient;
         NetworkStream stream;
         Action onError;
-        bool isLongMsg; // zabezpiecza przed atakiem poprzez przepełnienie stosu
+        readonly string packetEndSign = "!$"; // znacznik końca pakietu
+        string message;
 
         public Connection(TcpClient conncetion)
         {
@@ -24,33 +24,39 @@ namespace Epyks_Serwer
             onError = Disconnect;
         }
 
-        public Connection(Connection userConnection, int commandsPort, Action onError)
+        public Connection(Connection userConnection, Action onError)
         {
             connection = userConnection.connection;
             stream = userConnection.stream;
             Command = new Command(String.Empty);
             this.onError = onError;
-            string IP = ((IPEndPoint)connection.Client.RemoteEndPoint).Address.ToString();
-            udpClient = new UdpClient(IP, commandsPort);
-            isLongMsg = false;
         }
 
-        public void ReceiveMessage(int bufferSize = 256)
+        public void ReceiveMessage(bool recurrentCall = false)
         {
+            string[] messages = null;
             int i;
-            byte[] bytes = new byte[bufferSize];
+            Command = null;
+            byte[] bytes = new byte[256];
+            parameters = null;
             try
             {
-                parameters = null;
-                while ((i = stream.Read(bytes, 0, bytes.Length)) != 0)
+                if ((i = stream.Read(bytes, 0, bytes.Length)) != 0)
                 {
-                    string msg = Encoding.UTF8.GetString(bytes, 0, i);
-                    string[] args = Regex.Split(msg, ";"); // automatyczny podział komunikatu na argumenty
+                    message += Encoding.UTF8.GetString(bytes, 0, i);
+                    if (message.IndexOf(packetEndSign) == -1) // jeśli odczytana wiadomość nie zawiera znacznika końca wiadomości
+                        ReceiveMessage(true);
+                    if (recurrentCall)
+                        return;
+                    messages = SplitMessages(message);
+                    message = messages[0];
+                    string[] args = Regex.Split(message, ";"); // automatyczny podział komunikatu na argumenty
+                    ReplaceInArray(args, "%1", ";");
                     if (args.Length > 1)
                     {
                         parameters = new string[args.Length - 1];
                         for (int j = 1; j < args.Length; j++)
-                            parameters[j - 1] = args[j];
+                            parameters[j - 1] = args[j].Trim();
                     }
                     if (args.Length > 0)
                     {
@@ -58,15 +64,11 @@ namespace Epyks_Serwer
                             Command = new Command(args[0].Trim(), parameters.Length);
                         else
                             Command = new Command(args[0].Trim());
-                        if (!isLongMsg && Command == CommandSet.LongMessage)
-                        {
-                            ProcessLongMessage();
-                            isLongMsg = false;
-                        }
                     }
+                    if (messages.Length == 2)
+                        message = messages[1].TrimStart();
                     else
-                        Command = new Command(String.Empty);
-                    return;
+                        message = String.Empty;
                 }
             }
             catch
@@ -75,29 +77,20 @@ namespace Epyks_Serwer
             }
         }
 
-        private void ProcessLongMessage()
-        {
-            isLongMsg = true;
-            int size;
-            if (Int32.TryParse(parameters[0], out size) && size > 256)
-                ReceiveMessage(size);
-            else
-                ReceiveMessage();
-        }
-
         public void SendMessage(Command command, params string[] parameters)
         {
-            if (command.ParametersCount > 0 && command.ParametersCount != parameters.Length) // zabezpiecza przed wysłaniem niekomatybilnego komunikatu
-                throw new ArgumentOutOfRangeException("Command", "Command has less or more parameters than required");
+            if (parameters.Length < command.ParametersCount) // jeśli liczba parametrów nie spełnia wymogów komendy
+            {
+                Console.WriteLine("Komenda '{0}' nie spełnia wymaganych warunków. Wysyłanie nie powiodło się.", command.Text);
+                return;
+            }
             for (int i = 0; i < parameters.Length; i++)
-                parameters[i] = parameters[i]; // usuwa średnik z wiadomości ze względu na ich użycie przy podziale komunikatów
-            byte[] bytes = Encoding.UTF8.GetBytes(String.Join(";", command.Text, String.Join(";", parameters)));
+                parameters[i] = parameters[i].Trim();
+            ReplaceInArray(parameters, ";", "%1");
+            string msg = String.Join(";", command.Text, String.Join(";", parameters)) + packetEndSign;
+            byte[] bytes = Encoding.UTF8.GetBytes(msg);
             try
             {
-                if (bytes.Length > 256)
-                {
-                    NotifyLongMessage(bytes.Length);
-                }
                 stream.Write(bytes, 0, bytes.Length);
             }
             catch
@@ -107,16 +100,26 @@ namespace Epyks_Serwer
             }
         }
 
-        private void NotifyLongMessage(int size)
+        private void ReplaceInArray(string[] array, string replaceFrom, string replaceTo)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(CommandSet.LongMessage + ";" + size);
-            stream.Write(bytes, 0, bytes.Length);
+            for (int i = 0; i < array.Length; i++)
+                array[i] = array[i].Replace(replaceFrom, replaceTo);
         }
 
-        public void SendMessageUDP(string message)
+        private string[] SplitMessages(string message)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(message);
-            udpClient.Send(bytes, bytes.Length);
+            string[] array;
+            int index = message.IndexOf(packetEndSign);
+            if (index == -1)
+            {
+                array = new string[1];
+                array[0] = message;
+                return array;
+            }
+            array = new string[2];
+            array[0] = message.Substring(0, index);
+            array[1] = message.Substring(index + packetEndSign.Length);
+            return array;
         }
 
         public void Disconnect()
@@ -137,8 +140,6 @@ namespace Epyks_Serwer
             {
                 if (parameters == null || index >= parameters.Length)
                     return null;
-                if (index == parameters.Length - 1)
-                    return parameters[index].Trim(); // pozbywamy się pustych znaków będących pozostałością bufora
                 return parameters[index];
             }
         }

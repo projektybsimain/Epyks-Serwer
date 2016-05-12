@@ -17,6 +17,7 @@ namespace Epyks_Serwer
         public string Login { get; private set; } // wykorzystywane przy sprawdzaniu kto ze znajomych jest online
         public string Name { get; private set; }
         public string PasswordHash { get; private set; }
+        public string ClientPort { get; private set; }
         public List<Contact> ContactsList { get; set; }
         public bool IsBusy { get; private set; }
         private Thread thread;
@@ -74,8 +75,8 @@ namespace Epyks_Serwer
                     UnlockUser();
                 else if (connection.Command == CommandSet.BlockedUsers)
                     SendBlockedList();
-                else if (connection.Command != CommandSet.LongMessage) // ignorujemy wiadomości typu LONG_MSG
-                    connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
+
+                connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
             }
         }
 
@@ -94,6 +95,11 @@ namespace Epyks_Serwer
                 return;
             }
             Database.RemoveBlocked(Login, toUnlockLogin);
+        }
+
+        public void SetClientPort(int port)
+        {
+            ClientPort = port.ToString();
         }
 
         private void BlockUser()
@@ -300,9 +306,9 @@ namespace Epyks_Serwer
             connection.SendMessage(CommandSet.Contacts, String.Join(";", contacts));
         }
 
-        public void SetConnection(Connection connection, int commandsPort)
+        public void SetConnection(Connection connection)
         {
-            this.connection = new Connection(connection, commandsPort, LogoutUser);
+            this.connection = new Connection(connection, LogoutUser);
         }
 
         private string CalculateSHA256(string text, string salt)
@@ -342,22 +348,19 @@ namespace Epyks_Serwer
             string code = "0";
             if (isLoggingIn)
                 code = "1";
-            string message = CommandSet.StatusChanged + ";" + calledBy.Login + ";" + code;
-            connection.SendMessageUDP(message);
+            connection.SendMessage(CommandSet.StatusChanged, calledBy.Login, code);
             Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie statusu użytkownika " + calledBy.Login);
         }
 
         public void NewInvitation(User calledBy, string message)
         {
-            string msg = CommandSet.NewInvitation + ";" + calledBy.Login + ";" + calledBy.Name + ";" + message;
-            connection.SendMessageUDP(msg);
+            connection.SendMessage(CommandSet.NewInvitation, calledBy.Login, calledBy.Name, message);
             Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie nowym zaproszeniu od " + calledBy.Login);
         }
 
         public void InvitationAccepted(User calledBy)
         {
-            string msg = CommandSet.InvitationAccepted + ";" + calledBy.Login + ";" + calledBy.Name;
-            connection.SendMessageUDP(msg);
+            connection.SendMessage(CommandSet.InvitationAccepted, calledBy.Login, calledBy.Name);
         }
 
         private string GetIPString()
