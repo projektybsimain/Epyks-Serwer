@@ -36,7 +36,7 @@ namespace Epyks_Serwer
         {
             string[] messages = null;
             int i;
-            Command = null;
+            Command = new Command(String.Empty);
             byte[] bytes = new byte[256];
             parameters = null;
             try

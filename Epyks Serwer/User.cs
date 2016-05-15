@@ -72,8 +72,8 @@ namespace Epyks_Serwer
                     UnlockUser();
                 else if (connection.Command == CommandSet.BlockedUsers)
                     SendBlockedList();
-
-                connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
+                else
+                    connection.SendMessage(CommandSet.Error, ErrorMessageID.InvalidMessage);
             }
         }
 
