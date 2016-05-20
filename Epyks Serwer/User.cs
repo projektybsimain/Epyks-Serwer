@@ -270,7 +270,7 @@ namespace Epyks_Serwer
 
         private bool IsFriend(string targetLogin)
         {
-            return ContactsList.FindIndex(item => item.Login == targetLogin) == -1;
+            return ContactsList.FindIndex(item => item.Login == targetLogin) != -1;
         }
 
         private void Call()
