@@ -128,10 +128,10 @@ namespace Epyks_Serwer
             connection.Close();
         }
 
-        public string GetIPString()
+        public string GetIP()
         {
             IPEndPoint remoteIpEndPoint = connection.Client.RemoteEndPoint as IPEndPoint;
-            return remoteIpEndPoint.Address + ":" + remoteIpEndPoint.Port;
+            return remoteIpEndPoint.Address.ToString();
         }
 
         public string this[int index]

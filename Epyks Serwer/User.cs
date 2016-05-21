@@ -387,13 +387,11 @@ namespace Epyks_Serwer
             if (isLoggingIn)
                 code = "1";
             connection.SendMessage(CommandSet.StatusChanged, calledBy.Login, code);
-            Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie statusu użytkownika " + calledBy.Login);
         }
 
         public void NewInvitation(User calledBy, string message)
         {
             connection.SendMessage(CommandSet.NewInvitation, calledBy.Login, calledBy.Name, message);
-            Console.WriteLine("DEBUG: " + Login + " powiadomiony o zmianie nowym zaproszeniu od " + calledBy.Login);
         }
 
         public void InvitationAccepted(User calledBy)
@@ -403,7 +401,7 @@ namespace Epyks_Serwer
 
         private string GetIPString()
         {
-            return connection.GetIPString();
+            return connection.GetIP() + ":" + ClientPort;
         }
     }
 
