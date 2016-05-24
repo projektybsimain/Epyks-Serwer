@@ -4,8 +4,8 @@ namespace Epyks_Serwer
 {
     public static class CommandSet
     {
-        public static readonly Command Register = new Command("REGISTER", 4);
-        public static readonly Command Login = new Command("LOGIN", 3);
+        public static readonly Command Register = new Command("REGISTER", 5);
+        public static readonly Command Login = new Command("LOGIN", 4);
         public static readonly Command AuthFail = new Command("AUTH;FAIL");
         public static readonly Command AuthSuccess = new Command("AUTH;SUCCESS");
         public static readonly Command Contacts = new Command("CONTACTS");

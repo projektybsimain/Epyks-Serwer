@@ -14,7 +14,8 @@ namespace Epyks_Serwer
         public string Login { get; private set; } // wykorzystywane przy sprawdzaniu kto ze znajomych jest online
         public string Name { get; private set; }
         public string PasswordHash { get; private set; }
-        public string ClientPort { get; private set; }
+        public string Firstport { get; set; }
+        public string SecondPort { get; set; }
         public List<Contact> ContactsList { get; set; }
         public bool IsBusy { get; private set; }
         private Thread thread;
@@ -99,11 +100,6 @@ namespace Epyks_Serwer
             {
                 Database.RemoveBlocked(Login, toUnlockLogin);
             }
-        }
-
-        public void SetClientPort(int port)
-        {
-            ClientPort = port.ToString();
         }
 
         private void BlockUser()
@@ -316,7 +312,7 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Call, ErrorMessageID.UserBusy);
                 return;
             }
-            connection.SendMessage(CommandSet.Call, targetUser.GetIPString());
+            connection.SendMessage(CommandSet.Call, targetUser.GetIPString(), Firstport, SecondPort);
         }
 
         private void ChangePassword()
@@ -401,7 +397,7 @@ namespace Epyks_Serwer
 
         private string GetIPString()
         {
-            return connection.GetIP() + ":" + ClientPort;
+            return connection.GetIP();
         }
     }
 

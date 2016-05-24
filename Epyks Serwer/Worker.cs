@@ -55,27 +55,21 @@ namespace Epyks_Serwer
                     connection.Disconnect();
                     return;
                 }
-                int clientPort = 0;
                 bool isNewUser = false;
                 string login = connection[0].ToLower();
                 string password = connection[1];
                 string name = null;
+                string firstPort = null, secondPort = null;
 
                 if (connection.Command == CommandSet.Login)
                 {
-                    if (!Int32.TryParse(connection[2], out clientPort) || clientPort < 1 || clientPort > 65535)
-                    {
-                        connection.Disconnect();
-                        return;
-                    }
+                    firstPort = connection[2];
+                    secondPort = connection[3];
                 }
                 else if (connection.Command == CommandSet.Register)
                 {
-                    if (!Int32.TryParse(connection[3], out clientPort) || clientPort < 1 || clientPort > 65535)
-                    {
-                        connection.Disconnect();
-                        return;
-                    }
+                    firstPort = connection[3];
+                    secondPort = connection[4];
                     isNewUser = true;
                     name = connection[2];
                 }
@@ -111,7 +105,8 @@ namespace Epyks_Serwer
                     Console.WriteLine("Zalogowano użytkownika: " + login);
                     connection.SendMessage(CommandSet.AuthSuccess);
                     // przesyłamy referencje do danych które nie są znane bazie danych
-                    user.SetClientPort(clientPort);
+                    user.Firstport = firstPort;
+                    user.SecondPort = secondPort;
                     user.SetConnection(connection);
                     user.UpdateContactsList();
                     UserCollection.Add(user); // odnotowujemy że dany użytkownik stał się online 
