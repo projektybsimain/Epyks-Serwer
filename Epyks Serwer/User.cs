@@ -312,7 +312,7 @@ namespace Epyks_Serwer
                 connection.SendMessage(CommandSet.Call, ErrorMessageID.UserBusy);
                 return;
             }
-            connection.SendMessage(CommandSet.Call, targetUser.GetIPString(), Firstport, SecondPort);
+            connection.SendMessage(CommandSet.Call, targetUser.GetIPString(), targetUser.Firstport, targetUser.SecondPort);
         }
 
         private void ChangePassword()
