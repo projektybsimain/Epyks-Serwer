@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -131,7 +132,26 @@ namespace Epyks_Serwer
         public string GetIP()
         {
             IPEndPoint remoteIpEndPoint = connection.Client.RemoteEndPoint as IPEndPoint;
-            return remoteIpEndPoint.Address.ToString();
+            string ip = remoteIpEndPoint.Address.ToString();
+            if (ip == "127.0.0.1")
+            {
+                return LocalIPAddress();
+            }
+            return ip;
+        }
+
+        private string LocalIPAddress()
+        {
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+            {
+                return null;
+            }
+
+            IPHostEntry host = Dns.GetHostEntry(Dns.GetHostName());
+
+            return host
+                .AddressList
+                .FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
         }
 
         public string this[int index]
