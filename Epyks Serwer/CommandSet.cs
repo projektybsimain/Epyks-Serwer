@@ -1,6 +1,4 @@
-﻿using System.Reflection;
-
-namespace Epyks_Serwer
+﻿namespace Epyks_Serwer
 {
     public static class CommandSet
     {
@@ -21,7 +19,6 @@ namespace Epyks_Serwer
         public static readonly Command Block = new Command("BLOCK", 1);
         public static readonly Command Unlock = new Command("UNLOCK", 1);
         public static readonly Command StatusChanged = new Command("STATUS_CHANGED");
-        public static readonly Command Status = new Command("STATUS");
         public static readonly Command Error = new Command("ERROR");
         public static readonly Command OK = new Command("OK");
         public static readonly Command FoundUsers = new Command("FOUND_USERS");
@@ -34,16 +31,5 @@ namespace Epyks_Serwer
         public static readonly Command InvitationAccepted = new Command("INVIT_ACCEPTED", 2);
         public static readonly Command Remove = new Command("REMOVE", 1);
         public static readonly Command BlockedUsers = new Command("BLOCKED_USERS");
-
-        public static bool IsKnownCommand(string command)
-        {
-            PropertyInfo[] properties = typeof(CommandSet).GetProperties();
-            foreach (PropertyInfo property in properties)
-            {
-                if (command == property.GetValue(property).ToString())
-                    return true;
-            }
-            return false;
-        }
     }
 }

@@ -97,7 +97,6 @@ namespace Epyks_Serwer
             catch
             {
                 onError();
-                return;
             }
         }
 
