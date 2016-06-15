@@ -85,7 +85,7 @@ namespace Epyks_Serwer
             {
                 blockedLogins = Database.GetBlockedList(Login).ToArray();
             }
-            connection.SendMessage(CommandSet.Invitations, String.Join(";", blockedLogins));
+            connection.SendMessage(CommandSet.BlockedUsers, String.Join(";", blockedLogins));
         }
 
         private void UnlockUser()

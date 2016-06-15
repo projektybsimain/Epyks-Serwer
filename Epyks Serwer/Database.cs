@@ -173,8 +173,7 @@ namespace Ekyps_Serwer
             SQLiteDataReader reader = ExecuteReader(commandText);
             while (reader.Read())
             {
-                string _login = GetUserLogin(reader[0].ToString());
-                logins.Add(_login);
+                logins.Add(reader[0].ToString());
             }
             reader.Close();
             return logins;
