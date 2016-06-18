@@ -169,11 +169,11 @@ namespace Ekyps_Serwer
         public static List<string> GetBlockedList(string login)
         {
             List<string> logins = new List<string>();
-            string commandText = "SELECT * FROM Blocked WHERE TargetLogin = '" + login.ToLower() + "'";
+            string commandText = "SELECT * FROM Blocked WHERE Login = '" + login.ToLower() + "'";
             SQLiteDataReader reader = ExecuteReader(commandText);
             while (reader.Read())
             {
-                logins.Add(reader[0].ToString());
+                logins.Add(reader[1].ToString());
             }
             reader.Close();
             return logins;
@@ -243,16 +243,22 @@ namespace Ekyps_Serwer
             return ExecuteScalar(commandText);
         }
 
-        public static bool AddInvitation(User inviter, string targetLogin, string message)
+        public static string AddInvitation(User inviter, string targetLogin, string message)
         {
-            if (Exists("Contacts", inviter.Login, targetLogin) || InviteExists(inviter.ID, targetLogin) || !UserExists(targetLogin) || IsUserBlocked(inviter.Login, targetLogin))
-                return false;
+            if (Exists("Contacts", inviter.Login, targetLogin))
+                return ErrorMessageID.ContactExists;
+            else if (InviteExists(inviter.ID, targetLogin))
+                return ErrorMessageID.InviteExists;
+            else if (!UserExists(targetLogin))
+                return ErrorMessageID.UnknownUser;
+            else if (IsUserBlocked(inviter.Login, targetLogin))
+                return ErrorMessageID.UserBlocked;
             message = message.Trim();
             if (message.Length > 256)
                 message.Substring(0, 256);
             string commandText = "INSERT INTO Invitations (UserID, TargetLogin, Message) VALUES ('" + inviter.ID + "', '" + targetLogin + "', '" + message + "')";
             ExecuteNonQuery(commandText);
-            return true;
+            return ErrorMessageID.OK;
         }
 
         private static bool InviteExists(int userID, string inviterLogin)

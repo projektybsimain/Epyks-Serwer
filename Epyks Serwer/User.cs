@@ -192,14 +192,14 @@ namespace Epyks_Serwer
             string message = connection[1];
             if (message.Trim().Length == 0) // pozbywamy się pustych wiadomości
                 message = String.Empty;
-            bool result;
+            string result;
             lock (ThreadSync.Lock)
             {
                 result = Database.AddInvitation(this, targetLogin, message);
             }
-            if (!result)
+            if (result != ErrorMessageID.OK)
             {
-                connection.SendMessage(CommandSet.Error, ErrorMessageID.UnknownError);
+                connection.SendMessage(CommandSet.Error, result);
                 return;
             }
             try
@@ -211,6 +211,7 @@ namespace Epyks_Serwer
             {
                 Debug.WriteLine("Użytkownik " + targetLogin + " nie jest online");
             }
+            connection.SendMessage(CommandSet.OK);
         }
 
         private void SendName()

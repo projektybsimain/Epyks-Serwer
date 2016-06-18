@@ -14,5 +14,10 @@ namespace Epyks_Serwer
         public static readonly string UserOffline = "User Offline";
         public static readonly string UserBusy = "User Busy";
         public static readonly string NotInContacts = "User Not In Contacts";
+        public static readonly string OK = "OK";
+        public static readonly string ContactExists = "Contact already exists";
+        public static readonly string InviteExists = "Invite already exists";
+        public static readonly string UnknownUser = "Unknown User";
+        public static readonly string UserBlocked = "You can't send invitation. This user has blocked you";
     }
 }
